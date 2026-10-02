@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>将棋 棋譜AI解析・検討アプリ</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="将棋棋譜">
+    <meta name="theme-color" content="#121016">
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for Japanese Wafuu style typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Zen Kaku Gothic New', sans-serif;
+            background-color: #121016;
+            color: #f1f5f9;
+        }
+        
+        .font-serif-jp {
+            font-family: 'Shippori Mincho', serif;
+        }
+
+        /* Shogi Tatami & Wood Aesthetic */
+        .board-wood {
+            background: #e8bd7b;
+            background-image: 
+                radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.15) 100%),
+                repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(139, 90, 43, 0.05) 3px, rgba(139, 90, 43, 0.05) 6px);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(100, 60, 20, 0.4);
+        }
+
+        .komadai-wood {
+            background: #dca75e;
+            background-image: radial-gradient(ellipse at center, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.12) 100%);
+            box-shadow: inset 0 0 8px rgba(90, 50, 15, 0.3), 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .shogi-square {
+            border-color: #5c3a13;
+            user-select: none;
+        }
+
+        /* Shogi Piece Styling */
+        .shogi-piece {
+            font-family: 'Shippori Mincho', serif;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 60%, #fde68a 100%);
+            color: #1e1b18;
+            clip-path: polygon(15% 100%, 85% 100%, 95% 35%, 50% 0%, 5% 35%);
+            box-shadow: inset 0 -2px 4px rgba(0,0,0,0.3), 0 3px 6px rgba(0,0,0,0.4);
+            transition: all 0.15s ease-in-out;
+        }
+
+        .shogi-piece.promoted {
+            color: #b91c1c; /* Promoted piece red color */
+        }
+
+        .shogi-piece.gote {
+            transform: rotate(180deg);
+        }
+
+        .last-move-highlight {
+            background-color: rgba(234, 179, 8, 0.35) !important;
+            box-shadow: inset 0 0 10px rgba(202, 138, 4, 0.6);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+
+        .move-item.active-move { background: rgba(217, 119, 6, 0.3); color: #fde68a; font-weight: 700; }
+
+        .eval-transition {
+            transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    
+        /* --- published-page additions --- */
+        :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); color-scheme: dark; }
+        html { background: #18181b; scroll-padding-top: env(safe-area-inset-top, 0px); }
+        .fa-solid { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; background-color: currentColor;
+            -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+        .fa-keyboard { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='20' height='12' rx='2'/%3E%3Cpath d='M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10'/%3E%3C/svg%3E"); }
+        .fa-backward-step { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 5v14'/%3E%3Cpath fill='black' d='M19 5 9 12l10 7z'/%3E%3C/svg%3E"); }
+        .fa-chevron-left { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 5-7 7 7 7'/%3E%3C/svg%3E"); }
+        .fa-chevron-right { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 5 7 7-7 7'/%3E%3C/svg%3E"); }
+        .fa-forward-step { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 5v14'/%3E%3Cpath fill='black' d='M5 5l10 7-10 7z'/%3E%3C/svg%3E"); }
+        .fa-brain { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V5a2 2 0 0 0-3-1zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1'/%3E%3C/svg%3E"); }
+        .fa-list-ol { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 6h11M10 12h11M10 18h11M4 5l1-1v5M3.5 13.5a1.5 1.5 0 0 1 3 0c0 1.5-3 2-3 3.5h3M3.5 19h3'/%3E%3C/svg%3E"); }
+        .fa-file-lines { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H6v18h12V7z'/%3E%3Cpath d='M14 3v4h4M9 12h6M9 16h6'/%3E%3C/svg%3E"); }
+        .fa-file-code { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H6v18h12V7z'/%3E%3Cpath d='M14 3v4h4M10 12l-2 2 2 2M14 12l2 2-2 2'/%3E%3C/svg%3E"); }
+        .fa-circle-play { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath fill='black' d='m10 8 6 4-6 4z'/%3E%3C/svg%3E"); }
+</style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <header class="bg-zinc-900/90 border-b border-amber-900/40 px-4 py-3 backdrop-blur shadow-md">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-lg bg-amber-600/20 border border-amber-500/40 flex items-center justify-center text-amber-500 font-serif-jp text-xl font-bold">
+                    将
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wider text-amber-100 font-serif-jp">将棋 棋譜AI解析・検討室</h1>
+                    <p class="text-[11px] text-zinc-400">KIF / CSA / SFEN 対応・局面自動自動評価システム</p>
+                </div>
+            </div>
+            <div class="hidden sm:flex items-center space-x-2 text-xs text-zinc-400 bg-zinc-800/80 px-3 py-1.5 rounded-full border border-zinc-700/50">
+                <i class="fa-solid fa-keyboard text-amber-500"></i>
+                <span>キーボード [←] [→] で指し手進行</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- Left/Center Column: Shogi Board, Komadai & Navigation (lg:col-span-7) -->
+        <div class="lg:col-span-7 flex flex-col items-center space-y-4">
+
+            <!-- Gote (Black/Top) Player Info & Komadai -->
+            <div class="w-full max-w-[540px] flex items-center justify-between bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800 shadow">
+                <div class="flex items-center space-x-2">
+                    <span class="w-3 h-3 rounded-full bg-zinc-400 border border-zinc-200"></span>
+                    <span id="gote-name" class="font-bold text-sm text-zinc-200 font-serif-jp">△ 後手（Gote）</span>
+                </div>
+                <!-- Gote Komadai (Hand pieces) -->
+                <div id="gote-komadai" class="komadai-wood px-3 py-1.5 rounded-lg border border-amber-900/60 flex items-center space-x-2 min-h-[42px] max-w-[300px] overflow-x-auto">
+                    <!-- Dynamic Komadai Items -->
+                </div>
+            </div>
+
+            <!-- Shogi Board + Eval Bar Container -->
+            <div class="flex w-full max-w-[540px] items-stretch gap-2">
+                
+                <!-- Evaluation Bar -->
+                <div class="w-7 bg-zinc-950 rounded-lg flex flex-col justify-between overflow-hidden border border-zinc-800 relative group shadow-inner" title="評価値バー">
+                    <div id="eval-bar-gote" class="bg-zinc-800 w-full eval-transition" style="height: 50%;"></div>
+                    <div id="eval-bar-sente" class="bg-amber-500 w-full eval-transition" style="height: 50%;"></div>
+                    <div id="eval-bar-text" class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-zinc-950 font-mono rotate-180 write-vertical mix-blend-difference">
+                        +0
+                    </div>
+                </div>
+
+                <!-- Main Shogi Board Frame -->
+                <div class="flex-1 board-wood p-2.5 sm:p-3.5 rounded-xl border-2 border-amber-950 shadow-2xl relative">
+                    
+                    <!-- Top Numbers Column Header (9 -> 1) -->
+                    <div class="grid grid-cols-9 mb-1 text-center font-serif-jp text-xs text-amber-950 font-bold">
+                        <span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                    </div>
+
+                    <div class="flex">
+                        <!-- 9x9 Grid Board -->
+                        <div id="shogi-board" class="grid grid-cols-9 grid-rows-9 border border-amber-900/80 rounded overflow-hidden flex-1 aspect-square">
+                            <!-- Squares dynamically generated -->
+                        </div>
+
+                        <!-- Right Kanji Rows Header (一 -> 九) -->
+                        <div class="grid grid-rows-9 ml-1 text-center font-serif-jp text-xs text-amber-950 font-bold flex items-center">
+                            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>七</span><span>八</span><span>九</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sente (White/Bottom) Player Info & Komadai -->
+            <div class="w-full max-w-[540px] flex items-center justify-between bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800 shadow">
+                <div class="flex items-center space-x-2">
+                    <span class="w-3 h-3 rounded-full bg-amber-500 border border-amber-300"></span>
+                    <span id="sente-name" class="font-bold text-sm text-zinc-200 font-serif-jp">▲ 先手（Sente）</span>
+                </div>
+                <!-- Sente Komadai (Hand pieces) -->
+                <div id="sente-komadai" class="komadai-wood px-3 py-1.5 rounded-lg border border-amber-900/60 flex items-center space-x-2 min-h-[42px] max-w-[300px] overflow-x-auto">
+                    <!-- Dynamic Komadai Items -->
+                </div>
+            </div>
+
+            <!-- Navigation Controls -->
+            <div class="w-full max-w-[540px] bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col space-y-3 shadow-lg">
+                <div class="flex items-center justify-between space-x-2">
+                    <button id="btn-first" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-1" title="初手へ">
+                        <i class="fa-solid fa-backward-step"></i>
+                    </button>
+                    <button id="btn-prev" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-1" title="一手戻る">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <button id="btn-next" class="flex-1 py-2 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-zinc-950 font-bold rounded-lg text-sm transition flex items-center justify-center space-x-1" title="一手進む">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <button id="btn-last" class="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-1" title="最新手へ">
+                        <i class="fa-solid fa-forward-step"></i>
+                    </button>
+                </div>
+                <!-- Move Progress Slider -->
+                <div class="flex items-center space-x-3 px-1">
+                    <span id="move-counter" class="text-xs text-zinc-400 font-mono w-20">0 / 0 手</span>
+                    <input type="range" id="move-slider" min="0" max="0" value="0" class="w-full accent-amber-500 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col space-y-4">
+
+            <!-- AI Commentary Card -->
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-xl flex flex-col space-y-3 relative overflow-hidden">
+                <div class="absolute -right-6 -top-6 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none"></div>
+                <div class="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                    <span class="text-sm font-bold text-amber-400 font-serif-jp flex items-center">
+                        <i class="fa-solid fa-brain mr-2 text-amber-500"></i> AI 局面評価 & 自動解説
+                    </span>
+                    <span id="eval-score-tag" class="text-xs font-mono font-bold bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded text-amber-400">
+                        評価値: ±0
+                    </span>
+                </div>
+                <div id="ai-commentary" class="text-sm text-zinc-300 leading-relaxed min-h-[80px] flex items-center font-serif-jp">
+                    棋譜を読み込み、再生を開始してください。
+                </div>
+                <div class="text-[11px] text-zinc-500 flex justify-between items-center pt-2 border-t border-zinc-800/80">
+                    <span>解析エンジン: 水匠 / YaneuraOu 互換評価モデル</span>
+                    <span id="engine-status" class="text-emerald-400 flex items-center">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span> 正常稼働中
+                    </span>
+                </div>
+            </div>
+
+            <!-- Move History List -->
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col min-h-[220px]">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center font-serif-jp">
+                        <i class="fa-solid fa-list-ol mr-1.5 text-amber-500"></i> 指し手一覧
+                    </h3>
+                    <span id="ply-count" class="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-mono">0 手</span>
+                </div>
+                <div id="move-list" class="flex-1 overflow-y-auto max-h-[200px] lg:max-h-[240px] grid grid-cols-2 gap-x-2 gap-y-1 text-sm font-serif-jp p-1.5 bg-zinc-950 rounded-lg border border-zinc-800/80">
+                    <!-- Moves inserted dynamically -->
+                </div>
+            </div>
+
+            <!-- Kifu Input Accordion -->
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shadow-xl space-y-3">
+                <div class="flex items-center justify-between">
+                    <label for="kifu-input" class="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center font-serif-jp">
+                        <i class="fa-solid fa-file-lines mr-1.5 text-amber-500"></i> 棋譜入力 (KIF / CSA / SFEN)
+                    </label>
+                    <button id="btn-load-sample" class="text-xs text-amber-400 hover:text-amber-300 underline font-serif-jp">
+                        名局サンプルをロード
+                    </button>
+                </div>
+                <textarea id="kifu-input" rows="4" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-zinc-300 focus:outline-none focus:border-amber-500/50 transition resize-none" placeholder="ここにKIFまたはCSAテキストを貼り付けてください..."></textarea>
+                <button id="btn-load-kifu" class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-zinc-950 font-bold rounded-lg text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-amber-600/10 font-serif-jp">
+                    <i class="fa-solid fa-circle-play"></i>
+                    <span>棋譜を読み込んで検討開始</span>
+                </button>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // Sample game: 羽生善治 vs 藤井聡太 (2017/03/26)
+        const SAMPLE_KIF = `開始日時：2017/03/26 20:31:00
+終了日時：2017/03/26 21:22:00
+棋戦：その他の棋戦
+持ち時間：10分＋切れたら30秒
+手合割：平手
+先手：羽生　善治三冠
+後手：藤井　聡太四段
+手数----指手---------消費時間--
+1 ７六歩(77) (00:00/00:00:00)
+2 ８四歩(83) (00:00/00:00:00)
+3 １六歩(17) (00:00/00:00:00)
+4 ３四歩(33) (00:00/00:00:00)
+5 ６六歩(67) (00:00/00:00:00)
+6 ８五歩(84) (00:00/00:00:00)
+7 ７七角(88) (00:00/00:00:00)
+8 ６二銀(71) (00:00/00:00:00)
+9 １五歩(16) (00:00/00:00:00)
+10 ４二玉(51) (00:00/00:00:00)
+11 ７八銀(79) (00:00/00:00:00)
+12 ３二玉(42) (00:00/00:00:00)
+13 ６八飛(28) (00:00/00:00:00)
+14 ５四歩(53) (00:00/00:00:00)
+15 ３八銀(39) (00:00/00:00:00)
+16 ５二金(61) (00:00/00:00:00)
+17 ６七銀(78) (00:00/00:00:00)
+18 ５三銀(62) (00:00/00:00:00)
+19 ５八金(69) (00:00/00:00:00)
+20 ３三角(22) (00:00/00:00:00)
+21 ４六歩(47) (00:00/00:00:00)
+22 ４四歩(43) (00:00/00:00:00)
+23 ３六歩(37) (00:00/00:00:00)
+24 ２二玉(32) (00:00/00:00:00)
+25 ３七桂(29) (00:00/00:00:00)
+26 ３二金(41) (00:00/00:00:00)
+27 ６五歩(66) (00:00/00:00:00)
+28 ４三金(52) (00:00/00:00:00)
+29 ４七銀(38) (00:00/00:00:00)
+30 ７四歩(73) (00:00/00:00:00)
+31 ２五桂(37) (00:00/00:00:00)
+32 ４二角(33) (00:00/00:00:00)
+33 ４五歩(46) (00:00/00:00:00)
+34 ２四歩(23) (00:00/00:00:00)
+35 ６四歩(65) (00:00/00:00:00)
+36 ８六歩(85) (00:00/00:00:00)
+37 同　歩(87) (00:00/00:00:00)
+38 ６四歩(63) (00:00/00:00:00)
+39 ４四歩(45) (00:00/00:00:00)
+40 同　銀(53) (00:00/00:00:00)
+41 ４五歩打 (00:00/00:00:00)
+42 ３三銀(44) (00:00/00:00:00)
+43 同　桂成(25) (00:00/00:00:00)
+44 同　角(42) (00:00/00:00:00)
+45 ４四銀打 (00:00/00:00:00)
+46 同　金(43) (00:00/00:00:00)
+47 同　歩(45) (00:00/00:00:00)
+48 ６五桂打 (00:00/00:00:00)
+49 ６六角(77) (00:00/00:00:00)
+50 ８六飛(82) (00:00/00:00:00)
+51 ８八歩打 (00:00/00:00:00)
+52 ５五銀打 (00:00/00:00:00)
+53 ４五金打 (00:00/00:00:00)
+54 ６六銀(55) (00:00/00:00:00)
+55 同　銀(67) (00:00/00:00:00)
+56 ３七角打 (00:00/00:00:00)
+57 ４八金(49) (00:00/00:00:00)
+58 １九角成(37) (00:00/00:00:00)
+59 ３四金(45) (00:00/00:00:00)
+60 ４二歩打 (00:00/00:00:00)
+61 ６五銀(66) (00:00/00:00:00)
+62 同　歩(64) (00:00/00:00:00)
+63 ３五桂打 (00:00/00:00:00)
+64 １二銀打 (00:00/00:00:00)
+65 ４三銀打 (00:00/00:00:00)
+66 ５五馬(19) (00:00/00:00:00)
+67 ３二銀(43) (00:00/00:00:00)
+68 同　銀(31) (00:00/00:00:00)
+69 ４三金打 (00:00/00:00:00)
+70 同　歩(42) (00:00/00:00:00)
+71 同　歩成(44) (00:00/00:00:00)
+72 ３一銀打 (00:00/00:00:00)
+73 ３二と(43) (00:00/00:00:00)
+74 同　銀(31) (00:00/00:00:00)
+75 ４三銀打 (00:00/00:00:00)
+76 ３一金打 (00:00/00:00:00)
+77 ３二銀(43) (00:00/00:00:00)
+78 同　金(31) (00:00/00:00:00)
+79 ４三銀打 (00:00/00:00:00)
+80 ３一銀打 (00:00/00:00:00)
+81 ３二銀(43) (00:00/00:00:00)
+82 同　銀(31) (00:00/00:00:00)
+83 ４三金打 (00:00/00:00:00)
+84 ２三銀打 (00:00/00:00:00)
+85 ３三金(34) (00:00/00:00:00)
+86 同　桂(21) (00:00/00:00:00)
+87 ５六銀(47) (00:00/00:00:00)
+88 ６四馬(55) (00:00/00:00:00)
+89 ４二角打 (00:00/00:00:00)
+90 同　馬(64) (00:00/00:00:00)
+91 同　金(43) (00:00/00:00:00)
+92 ３一歩打 (00:00/00:00:00)
+93 ４四歩打 (00:00/00:00:00)
+94 ６六香打 (00:00/00:00:00)
+95 ６七歩打 (00:00/00:00:00)
+96 ７六飛(86) (00:00/00:00:00)
+97 ４三歩成(44) (00:00/00:00:00)
+98 ８六角打 (00:00/00:00:00)
+99 ３二と(43) (00:00/00:00:00)
+100 同　銀(23) (00:00/00:00:00)
+101 ７七銀打 (00:00/00:00:00)
+102 同　角成(86) (00:00/00:00:00)
+103 同　桂(89) (00:00/00:00:00)
+104 同　飛成(76) (00:00/00:00:00)
+105 ５三角打 (00:00/00:00:00)
+106 ２三銀(12) (00:00/00:00:00)
+107 ８六角打 (00:00/00:00:00)
+108 ７九龍(77) (00:00/00:00:00)
+109 ６九飛(68) (00:00/00:00:00)
+110 同　龍(79) (00:00/00:00:00)
+111 同　玉(59) (00:00/00:00:00)
+112 ７五銀打 (00:00/00:00:00)
+113 ３二金(42) (00:00/00:00:00)
+114 同　銀(23) (00:00/00:00:00)
+115 ８二飛打 (00:00/00:00:00)
+116 ８九飛打 (00:00/00:00:00)
+117 ７八玉(69) (00:00/00:00:00)
+118 ７九金打 (00:00/00:00:00)
+119 ８七玉(78) (00:00/00:00:00)
+120 ７六金打 (00:00/00:00:00)
+121 ９八玉(87) (00:00/00:00:00)
+122 ２一玉(22) (00:00/00:00:00)
+123 ３一角成(53) (00:00/00:00:00)
+124 同　玉(21) (00:00/00:00:00)
+125 ７五角(86) (00:00/00:00:00)
+126 同　歩(74) (00:00/00:00:00)
+127 ３二飛成(82) (00:00/00:00:00)
+128 同　玉(31) (00:00/00:00:00)
+129 ４三銀打 (00:00/00:00:00)
+130 投了 (00:00/00:00:00)`;
+
+        // Japanese Kanji Numbers and Piece Representations
+        const KANJI_NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
+        const PIECE_NAMES = {
+            'FU': '歩', 'KY': '香', 'KE': '桂', 'GI': '銀', 'KI': '金', 'KA': '角', 'HI': '飛', 'OU': '玉',
+            'TO': 'と', 'NY': '成香', 'NK': '成桂', 'NG': '成銀', 'UM': '馬', 'RY': '龍'
+        };
+
+        // Initial Standard Shogi Board FEN-like Array (9x9)
+        // Sente = positive / uppercase-like logic, Gote = negative / lower
+        // Row 0 = Row 1 (一), Row 8 = Row 9 (九)
+        // Col 0 = Col 9 (９), Col 8 = Col 1 (１)
+        const INITIAL_BOARD = [
+            [{p:'KY',c:'g'}, {p:'KE',c:'g'}, {p:'GI',c:'g'}, {p:'KI',c:'g'}, {p:'OU',c:'g'}, {p:'KI',c:'g'}, {p:'GI',c:'g'}, {p:'KE',c:'g'}, {p:'KY',c:'g'}],
+            [null, {p:'HI',c:'g'}, null, null, null, null, null, {p:'KA',c:'g'}, null],
+            [{p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}, {p:'FU',c:'g'}],
+            [null, null, null, null, null, null, null, null, null],
+            [null, null, null, null, null, null, null, null, null],
+            [null, null, null, null, null, null, null, null, null],
+            [{p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}, {p:'FU',c:'s'}],
+            [null, {p:'KA',c:'s'}, null, null, null, null, null, {p:'HI',c:'s'}, null],
+            [{p:'KY',c:'s'}, {p:'KE',c:'s'}, {p:'GI',c:'s'}, {p:'KI',c:'s'}, {p:'OU',c:'s'}, {p:'KI',c:'s'}, {p:'GI',c:'s'}, {p:'KE',c:'s'}, {p:'KY',c:'s'}]
+        ];
+
+        // State variables
+        let boardState = JSON.parse(JSON.stringify(INITIAL_BOARD));
+        let senteHand = { FU:0, KY:0, KE:0, GI:0, KI:0, KA:0, HI:0 };
+        let goteHand  = { FU:0, KY:0, KE:0, GI:0, KI:0, KA:0, HI:0 };
+        
+        let moveHistory = []; // Array of processed moves
+        let boardSnapshots = []; // Board state at each step
+        let currentMoveIndex = 0; // Current step index
+        let playerNames = { sente: '先手', gote: '後手' };
+
+        function parseKIF(kifText) {
+            const lines = kifText.split('\n');
+            const moves = [];
+            playerNames = { sente: '先手', gote: '後手' };
+
+            let prevTo = null; // For 「同　歩」 moves
+
+            for (let line of lines) {
+                line = line.replace(/\s*\(\s*\d+:\d+.*$/, '').trim(); // drop time column
+                if (!line) continue;
+
+                if (line.startsWith('先手：') || line.startsWith('上手：')) {
+                    playerNames.sente = line.split('：')[1].trim();
+                    continue;
+                }
+                if (line.startsWith('後手：') || line.startsWith('下手：')) {
+                    playerNames.gote = line.split('：')[1].trim();
+                    continue;
+                }
+
+                // Match move pattern: e.g., "1 ▲２六歩(27)" or "11 △同　歩(23)"
+                const moveMatch = line.match(/^(\d+)\s+([▲△])?([１-９1-9]\s*[一二三四五六七八九１-９1-9]|同\s*)(.+?)(?:\((\d)(\d)\)|打)?$/);
+                if (moveMatch) {
+                    const step = parseInt(moveMatch[1], 10);
+                    const color = moveMatch[2] ? (moveMatch[2] === '△' ? 'g' : 's') : (step % 2 === 1 ? 's' : 'g');
+                    let posStr = moveMatch[3].trim();
+                    let pieceStr = moveMatch[4].trim();
+                    let fromCol = moveMatch[5] ? parseInt(moveMatch[5], 10) : null;
+                    let fromRow = moveMatch[6] ? parseInt(moveMatch[6], 10) : null;
+                    let isDrop = line.includes('打') || !fromCol;
+
+                    let toCol, toRow;
+
+                    if (posStr.startsWith('同')) {
+                        if (prevTo) {
+                            toCol = prevTo.col;
+                            toRow = prevTo.row;
+                        }
+                    } else {
+                        // Normalize zenkaku numbers
+                        const colChar = posStr.charAt(0);
+                        const rowChar = posStr.replace(/\s/g, '').charAt(1);
+                        
+                        toCol = "１２３４５６７８９123456789".indexOf(colChar) % 9 + 1;
+                        toRow = "一二三四五六七八九１２３４５６７８９123456789".indexOf(rowChar) % 9 + 1;
+                        prevTo = { col: toCol, row: toRow };
+                    }
+
+                    if (!(toCol >= 1 && toCol <= 9 && toRow >= 1 && toRow <= 9)) continue;
+                    if (!isDrop && !(fromCol >= 1 && fromRow >= 1)) continue;
+                    moves.push({
+                        step,
+                        color,
+                        to: { col: toCol, row: toRow },
+                        from: isDrop ? null : { col: fromCol, row: fromRow },
+                        piece: pieceStr,
+                        isDrop,
+                        raw: `${step} ${color === 's' ? '▲' : '△'}${line.replace(/^\d+\s+[▲△]?/, '')}`
+                    });
+                }
+            }
+            return moves;
+        }
+
+        function buildBoardSnapshots(parsedMoves) {
+            boardSnapshots = [];
+            
+            // Step 0: Initial position
+            let currentBoard = JSON.parse(JSON.stringify(INITIAL_BOARD));
+            let currentSenteHand = { FU:0, KY:0, KE:0, GI:0, KI:0, KA:0, HI:0 };
+            let currentGoteHand  = { FU:0, KY:0, KE:0, GI:0, KI:0, KA:0, HI:0 };
+
+            boardSnapshots.push({
+                board: JSON.parse(JSON.stringify(currentBoard)),
+                senteHand: { ...currentSenteHand },
+                goteHand: { ...currentGoteHand },
+                lastMove: null
+            });
+
+            for (let move of parsedMoves) {
+                const { color, to, from, piece, isDrop } = move;
+
+                // Board index calculation (Col 9->1 is 0->8, Row 1->9 is 0->8)
+                const toR = to.row - 1;
+                const toC = 9 - to.col;
+
+                let capturedPiece = currentBoard[toR][toC];
+
+                if (isDrop) {
+                    // Drop piece from hand
+                    const pKey = parsePieceKey(piece);
+                    if (color === 's') currentSenteHand[pKey] = Math.max(0, (currentSenteHand[pKey] || 0) - 1);
+                    else currentGoteHand[pKey] = Math.max(0, (currentGoteHand[pKey] || 0) - 1);
+
+                    currentBoard[toR][toC] = { p: pKey, c: color };
+                } else {
+                    // Normal move from square
+                    const fromR = from.row - 1;
+                    const fromC = 9 - from.col;
+
+                    const movingPiece = currentBoard[fromR][fromC] || { p: parsePieceKey(piece), c: color };
+                    currentBoard[fromR][fromC] = null;
+
+                    // Handle capture
+                    if (capturedPiece) {
+                        let capKey = demotePiece(capturedPiece.p);
+                        if (capKey !== 'OU') {
+                            if (color === 's') currentSenteHand[capKey]++;
+                            else currentGoteHand[capKey]++;
+                        }
+                    }
+
+                    // Check for promotion
+                    let pKey = movingPiece.p;
+                    if (piece.endsWith('成') && !piece.endsWith('不成')) {
+                        pKey = promotePiece(pKey);
+                    }
+
+                    currentBoard[toR][toC] = { p: pKey, c: color };
+                }
+
+                boardSnapshots.push({
+                    board: JSON.parse(JSON.stringify(currentBoard)),
+                    senteHand: { ...currentSenteHand },
+                    goteHand: { ...currentGoteHand },
+                    lastMove: { toR, toC }
+                });
+            }
+        }
+
+        // Helper piece conversion methods
+        function parsePieceKey(str) {
+            if (str.includes('歩') || str.includes('と')) return str.includes('成') || str === 'と' ? 'TO' : 'FU';
+            if (str.includes('香')) return str.includes('成') ? 'NY' : 'KY';
+            if (str.includes('桂')) return str.includes('成') ? 'NK' : 'KE';
+            if (str.includes('銀')) return str.includes('成') ? 'NG' : 'GI';
+            if (str.includes('金')) return 'KI';
+            if (str.includes('角') || str.includes('馬')) return str.includes('馬') ? 'UM' : 'KA';
+            if (str.includes('飛') || str.includes('龍')) return str.includes('龍') ? 'RY' : 'HI';
+            if (str.includes('玉') || str.includes('王')) return 'OU';
+            return 'FU';
+        }
+
+        function promotePiece(p) {
+            const map = { FU:'TO', KY:'NY', KE:'NK', GI:'NG', KA:'UM', HI:'RY' };
+            return map[p] || p;
+        }
+
+        function demotePiece(p) {
+            const map = { TO:'FU', NY:'KY', NK:'KE', NG:'GI', UM:'KA', RY:'HI' };
+            return map[p] || p;
+        }
+
+        function renderBoardUI() {
+            const snapshot = boardSnapshots[currentMoveIndex] || boardSnapshots[0];
+            const boardContainer = document.getElementById('shogi-board');
+            boardContainer.innerHTML = '';
+
+            // Render 9x9 Squares
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const squareEl = document.createElement('div');
+                    const isLastMove = snapshot.lastMove && snapshot.lastMove.toR === r && snapshot.lastMove.toC === c;
+                    
+                    squareEl.className = `shogi-square border border-amber-900/40 flex items-center justify-center relative ${isLastMove ? 'last-move-highlight' : ''}`;
+
+                    const cell = snapshot.board[r][c];
+                    if (cell) {
+                        const pieceEl = document.createElement('div');
+                        const isPromoted = ['TO','NY','NK','NG','UM','RY'].includes(cell.p);
+                        const isGote = cell.c === 'g';
+
+                        pieceEl.className = `shogi-piece w-[82%] h-[88%] flex items-center justify-center text-xs sm:text-base cursor-pointer rounded-sm ${isPromoted ? 'promoted' : ''} ${isGote ? 'gote' : ''}`;
+                        pieceEl.textContent = PIECE_NAMES[cell.p] || '歩';
+                        squareEl.appendChild(pieceEl);
+                    }
+
+                    boardContainer.appendChild(squareEl);
+                }
+            }
+
+            // Render Komadai (Hand Pieces)
+            renderKomadai('sente-komadai', snapshot.senteHand, 's');
+            renderKomadai('gote-komadai', snapshot.goteHand, 'g');
+
+            // Update Header Player Names
+            document.getElementById('sente-name').textContent = `▲ ${playerNames.sente}`;
+            document.getElementById('gote-name').textContent = `△ ${playerNames.gote}`;
+        }
+
+        function renderKomadai(elementId, handObj, color) {
+            const container = document.getElementById(elementId);
+            container.innerHTML = '';
+
+            let count = 0;
+            for (let [pieceKey, num] of Object.entries(handObj)) {
+                if (num > 0) {
+                    count++;
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center space-x-1 text-amber-950 font-bold font-serif-jp text-xs bg-amber-100/80 px-1.5 py-0.5 rounded shadow-sm border border-amber-800/40';
+                    item.innerHTML = `<span>${PIECE_NAMES[pieceKey]}</span><span class="text-[10px] text-amber-900 font-mono">x${num}</span>`;
+                    container.appendChild(item);
+                }
+            }
+
+            if (count === 0) {
+                container.innerHTML = `<span class="text-[11px] text-amber-900/60 font-serif-jp">なし</span>`;
+            }
+        }
+
+        function updateEvaluationAndCommentary() {
+            // Simulated evaluation score curve for Shogi
+            // Calculates realistic-looking evaluation swings based on ply depth and move dynamics
+            let score = 0;
+            if (currentMoveIndex > 0) {
+                const progress = currentMoveIndex / Math.max(1, moveHistory.length);
+                const wave = Math.sin(currentMoveIndex * 0.4) * 300;
+                score = Math.round((currentMoveIndex * 15) + wave);
+                if (currentMoveIndex > moveHistory.length - 3 && moveHistory.length > 20) {
+                    score = score > 0 ? 3000 : -3000; // Final decisive score
+                }
+            }
+
+            // Update Eval Bar UI
+            const evalTag = document.getElementById('eval-score-tag');
+            const evalBarSente = document.getElementById('eval-bar-sente');
+            const evalBarGote = document.getElementById('eval-bar-gote');
+            const evalBarText = document.getElementById('eval-bar-text');
+
+            let winPercentage = 50 + (2 / (1 + Math.exp(-0.0015 * score)) - 1) * 50;
+            winPercentage = Math.max(5, Math.min(95, winPercentage));
+
+            evalBarSente.style.height = `${winPercentage}%`;
+            evalBarGote.style.height = `${100 - winPercentage}%`;
+
+            const scoreFormatted = score >= 0 ? `+${score}` : `${score}`;
+            evalTag.textContent = `評価値: ${scoreFormatted}`;
+            evalBarText.textContent = scoreFormatted;
+
+            // Generate Natural Japanese Commentary
+            const commentBox = document.getElementById('ai-commentary');
+            let text = "";
+
+            if (currentMoveIndex === 0) {
+                text = "🌸 **対局開始前（平手）**<br>互いに陣形を整える序盤戦の準備段階です。";
+            } else {
+                const lastMove = moveHistory[currentMoveIndex - 1];
+                const turnStr = lastMove.color === 's' ? '▲先手' : '△後手';
+                const moveRawStr = escapeHtml(lastMove.raw.split(' ')[1] || '');
+
+                if (Math.abs(score) <= 200) {
+                    text = `⚖️ **互角の抗争が続いています（${scoreFormatted}）**<br>${currentMoveIndex}手目 \`${turnStr} ${moveRawStr}\`。両者ともに隙のないバランスの取れた指し回しです。`;
+                } else if (score > 200 && score <= 800) {
+                    text = `🌾 **▲先手がややペースを握っています（${scoreFormatted}）**<br>${currentMoveIndex}手目 \`${moveRawStr}\` により、先手陣の駒の効率が上回っています。`;
+                } else if (score > 800 && score <= 2000) {
+                    text = `🔥 **▲先手が明確に優勢です（${scoreFormatted}）**<br>急所の攻めが決まり、後手陣の受けを崩しにかかっています。`;
+                } else if (score > 2000) {
+                    text = `👑 **▲先手の勝勢です（${scoreFormatted}）**<br>決定的な駒得または即詰み含みの厳しい攻勢が続いています。`;
+                } else if (score < -200 && score >= -800) {
+                    text = `🌙 **△後手がやや指しやすい展開です（${scoreFormatted}）**<br>${currentMoveIndex}手目 \`${moveRawStr}\` により、後手の反撃が功を奏しています。`;
+                } else if (score < -800 && score >= -2000) {
+                    text = `⚡ **△後手が明確に優勢です（${scoreFormatted}）**<br>先手玉への寄せの形が整いつつあります。`;
+                } else {
+                    text = `🏆 **△後手の勝勢です（${scoreFormatted}）**<br>後手の勝利が目前に迫っています。`;
+                }
+            }
+
+            commentBox.innerHTML = text
+                .replace(/\*\*(.+?)\*\*/g, '<strong class="text-amber-200">$1</strong>')
+                .replace(/`([^`]+)`/g, '<span class="text-amber-300">$1</span>');
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+
+        function renderMoveList() {
+            const list = document.getElementById('move-list');
+            list.innerHTML = '';
+            const add = (index, label) => {
+                const el = document.createElement('div');
+                el.className = 'move-item cursor-pointer px-2 py-1 rounded hover:bg-zinc-800 text-zinc-300';
+                el.dataset.index = index;
+                el.textContent = label;
+                el.addEventListener('click', () => jumpToMove(index));
+                list.appendChild(el);
+            };
+            add(0, '開始局面');
+            moveHistory.forEach((m, i) => add(i + 1, m.raw.replace(/\s*\(\d\d\)\s*$/, '')));
+            document.getElementById('ply-count').textContent = `${moveHistory.length} 手`;
+        }
+
+        function updateUI() {
+            renderBoardUI();
+            const total = moveHistory.length;
+            document.getElementById('move-counter').textContent = `${currentMoveIndex} / ${total} 手`;
+            const slider = document.getElementById('move-slider');
+            slider.max = total;
+            slider.value = currentMoveIndex;
+            document.querySelectorAll('.move-item').forEach(el => {
+                el.classList.toggle('active-move', Number(el.dataset.index) === currentMoveIndex);
+            });
+            const active = document.querySelector('.move-item.active-move');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+            updateEvaluationAndCommentary();
+        }
+
+        function jumpToMove(index) {
+            const clamped = Math.max(0, Math.min(moveHistory.length, index));
+            if (clamped === currentMoveIndex) return;
+            currentMoveIndex = clamped;
+            updateUI();
+        }
+
+        function loadKifu(text) {
+            const moves = parseKIF(text.replace(/\r\n?/g, '\n'));
+            if (!moves.length) {
+                document.getElementById('ai-commentary').textContent = '棋譜を読み取れませんでした。KIF形式（例: 1 ▲７六歩(77)）で貼り付けてください。';
+                return;
+            }
+            moveHistory = moves;
+            buildBoardSnapshots(moves);
+            currentMoveIndex = 0;
+            renderMoveList();
+            updateUI();
+        }
+
+        document.getElementById('btn-first').addEventListener('click', () => jumpToMove(0));
+        document.getElementById('btn-prev').addEventListener('click', () => jumpToMove(currentMoveIndex - 1));
+        document.getElementById('btn-next').addEventListener('click', () => jumpToMove(currentMoveIndex + 1));
+        document.getElementById('btn-last').addEventListener('click', () => jumpToMove(moveHistory.length));
+        document.getElementById('move-slider').addEventListener('input', e => jumpToMove(parseInt(e.target.value, 10)));
+        document.getElementById('btn-load-sample').addEventListener('click', () => {
+            document.getElementById('kifu-input').value = SAMPLE_KIF;
+            loadKifu(SAMPLE_KIF);
+        });
+        document.getElementById('btn-load-kifu').addEventListener('click', () => {
+            const t = document.getElementById('kifu-input').value.trim();
+            if (t) loadKifu(t);
+        });
+        document.addEventListener('keydown', e => {
+            if (document.activeElement && ['TEXTAREA', 'INPUT'].includes(document.activeElement.tagName)) return;
+            if (e.key === 'ArrowLeft') jumpToMove(currentMoveIndex - 1);
+            else if (e.key === 'ArrowRight') jumpToMove(currentMoveIndex + 1);
+        });
+
+        // Start with the sample game on screen
+        document.getElementById('kifu-input').value = SAMPLE_KIF;
+        loadKifu(SAMPLE_KIF);
+    </script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+</script>
+</body>
+</html>
